@@ -4,8 +4,8 @@ from pydantic import BaseModel
 import joblib
 import pandas as pd
 import uvicorn
+import os
 
-# ── App setup ──────────────────────────────────────────────────────────────────
 app = FastAPI(title="GJU Major Recommendation API")
 
 app.add_middleware(
@@ -15,13 +15,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── Load model ─────────────────────────────────────────────────────────────────
-model = joblib.load("top_15.pkl")
+try:
+    model = joblib.load("top_15.pkl")
+    print("Model loaded successfully!")
+except Exception as e:
+    print(f"Error loading model: {e}")
+    model = None
 
 TOP_15_COLS = ['A3', 'I1', 'I4', 'A8', 'A5', 'R4', 'E5',
                'S8', 'C5', 'S3', 'E3', 'A2', 'R3', 'I8', 'S4']
 
-# ── School → Majors mapping ────────────────────────────────────────────────────
 SCHOOL_MAJORS = {
     "School of Computing": [
         "Computer Science (min 75%)",
@@ -63,8 +66,7 @@ SCHOOL_MAJORS = {
     ]
 }
 
-# ── Tawjihi filter ─────────────────────────────────────────────────────────────
-def filter_by_tawjihi(majors: list, tawjihi: float) -> list:
+def filter_by_tawjihi(majors, tawjihi):
     filtered = []
     for m in majors:
         if "min 82%" in m and tawjihi < 82:
@@ -80,71 +82,31 @@ def filter_by_tawjihi(majors: list, tawjihi: float) -> list:
         filtered.append(m)
     return filtered
 
-# ── Input schema ───────────────────────────────────────────────────────────────
 class StudentInput(BaseModel):
     tawjihi: float
-    A3: int   # I enjoy sketching, drawing, or painting
-    I1: int   # I enjoy solving math or science problems
-    I4: int   # I enjoy doing laboratory work
-    A8: int   # I enjoy attending art exhibits, concerts, or theatre
-    A5: int   # I enjoy creative writing
-    R4: int   # I enjoy repairing mechanical equipment
-    E5: int   # I enjoy persuading others to do things my way
-    S8: int   # I enjoy helping others with personal problems
-    C5: int   # I enjoy keeping detailed records
-    S3: int   # I enjoy teaching or training others
-    E3: int   # I enjoy leading a group toward a goal
-    A2: int   # I enjoy playing a musical instrument
-    R3: int   # I enjoy working on cars or machines
-    I8: int   # I enjoy reading scientific or technical journals
-    S4: int   # I enjoy working with the elderly or disabled
+    A3: int
+    I1: int
+    I4: int
+    A8: int
+    A5: int
+    R4: int
+    E5: int
+    S8: int
+    C5: int
+    S3: int
+    E3: int
+    A2: int
+    R3: int
+    I8: int
+    S4: int
 
-# ── Prediction endpoint ────────────────────────────────────────────────────────
-@app.post("/predict")
-def predict(student: StudentInput):
-    # Build input dataframe
-    answers = {col: getattr(student, col) for col in TOP_15_COLS}
-    input_df = pd.DataFrame([answers])
-
-    # Get prediction and probabilities
-    prediction = model.predict(input_df)[0]
-    probabilities = model.predict_proba(input_df)[0]
-
-    # Build ranked schools
-    ranked = sorted(
-        zip(model.classes_, probabilities),
-        key=lambda x: x[1],
-        reverse=True
-    )
-
-    # Get top 3 schools with their majors (filtered by tawjihi)
-    recommendations = []
-    for school, prob in ranked[:4]:
-        majors = SCHOOL_MAJORS.get(school, [])
-        available = filter_by_tawjihi(majors, student.tawjihi)
-        if available:
-            recommendations.append({
-                "school": school,
-                "confidence": f"{prob:.1%}",
-                "available_majors": available
-            })
-        if len(recommendations) == 3:
-            break
-
-    return {
-        "top_school": prediction,
-        "tawjihi_score": student.tawjihi,
-        "recommendations": recommendations,
-        "model_accuracy": "77%",
-        "note": "Based on RIASEC psychological profile + Tawjihi score filtering"
-    }
-
-# ── Health check ───────────────────────────────────────────────────────────────
 @app.get("/")
 def root():
-    return {"status": "GJU Recommendation API is running", "model": "Random Forest (77% accuracy)"}
+    return {
+        "status": "GJU Recommendation API is running",
+        "model_loaded": model is not None
+    }
 
-# ── Questions endpoint (for frontend) ─────────────────────────────────────────
 @app.get("/questions")
 def get_questions():
     return {
@@ -174,7 +136,41 @@ def get_questions():
         }
     }
 
+@app.post("/predict")
+def predict(student: StudentInput):
+    if model is None:
+        return {"error": "Model not loaded"}
+    try:
+        answers = {col: getattr(student, col) for col in TOP_15_COLS}
+        input_df = pd.DataFrame([answers])
+        prediction = model.predict(input_df)[0]
+        probabilities = model.predict_proba(input_df)[0]
+        ranked = sorted(
+            zip(model.classes_, probabilities),
+            key=lambda x: x[1],
+            reverse=True
+        )
+        recommendations = []
+        for school, prob in ranked[:4]:
+            majors = SCHOOL_MAJORS.get(school, [])
+            available = filter_by_tawjihi(majors, student.tawjihi)
+            if available:
+                recommendations.append({
+                    "school": school,
+                    "confidence": f"{prob:.1%}",
+                    "available_majors": available
+                })
+            if len(recommendations) == 3:
+                break
+        return {
+            "top_school": prediction,
+            "tawjihi_score": student.tawjihi,
+            "recommendations": recommendations,
+            "model_accuracy": "77%"
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
 if __name__ == "__main__":
-    import os
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)

@@ -60,10 +60,7 @@ SCHOOL_MAJORS = {
         "Pharmaceutical and Chemical Engineering (min 80%)",
         "Biomedical Engineering (min 80%)"
     ],
-    "School of Sustainable Systems & Engineering": [
-        "Civil and Environmental Engineering",
-        "Electrical Engineering"
-    ]
+    "School of Sustainable Systems & Engineering": [],
 }
 
 def filter_by_tawjihi(majors, tawjihi):

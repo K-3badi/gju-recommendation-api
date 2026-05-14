@@ -355,8 +355,8 @@ GJU KNOWLEDGE BASE:
 YOUR TASK:
 Recommend exactly 3 majors:
 1. PRIMARY: Best major from the ML-predicted school
-2. SECOND: Best match from any school based on full profile
-3. THIRD: Another good match from any school
+2. SECOND: Pick the BEST matching major from ALL available_majors list based on student RIASEC scores, work environment preference, and subjects. This can be from ANY school - do not limit to predicted school.
+3. THIRD: Pick another good match from ALL available_majors from a DIFFERENT school than #2 if possible.
 
 For each provide:
 - Major name and school
